@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vibe Note - 깔끔하고 스마트한 웹 메모장</title>
+  <!-- Google Fonts: Outfit & Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome for beautiful icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      --panel-bg: rgba(30, 41, 59, 0.7);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --danger-light: rgba(239, 68, 68, 0.15);
+      --card-bg: rgba(15, 23, 42, 0.6);
+      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+      --radius-lg: 24px;
+      --radius-md: 16px;
+      --font-main: 'Outfit', 'Noto Sans KR', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg-gradient);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    /* Background decorative glow elements */
+    .glow-circle {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
+      top: -100px;
+      left: -100px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .glow-circle-2 {
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, rgba(0,0,0,0) 70%);
+      bottom: -150px;
+      right: -150px;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .app-container {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 540px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      box-shadow: var(--shadow-lg);
+      transition: transform 0.3s ease;
+    }
+
+    header {
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .logo-icon {
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 2rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
+
+    /* Input form styled beautifully */
+    .input-form {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .input-wrapper {
+      position: relative;
+      flex-grow: 1;
+    }
+
+    .memo-input {
+      width: 100%;
+      padding: 16px 16px 16px 48px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-family: var(--font-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .memo-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      background: rgba(15, 23, 42, 0.6);
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      transition: color 0.3s ease;
+      pointer-events: none;
+    }
+
+    .memo-input:focus + .input-icon {
+      color: var(--accent);
+    }
+
+    .add-btn {
+      background: var(--accent-gradient);
+      color: white;
+      border: none;
+      padding: 0 20px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-main);
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .add-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .add-btn:active {
+      transform: translateY(0);
+    }
+
+    /* Memo list container */
+    .memo-list-container {
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    /* Custom Scrollbar for list container */
+    .memo-list-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .memo-list-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .memo-list-container::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    .memo-list-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .memo-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Individual memo item with entrance animation */
+    .memo-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: slideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    @keyframes slideIn {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .memo-item:hover {
+      border-color: rgba(99, 102, 241, 0.3);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .memo-content-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      padding-right: 16px;
+    }
+
+    .check-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1.15rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px 0 0;
+      transition: color 0.2s ease, transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .check-btn:hover {
+      color: var(--accent);
+      transform: scale(1.08);
+    }
+
+    .check-btn:active {
+      transform: scale(0.92);
+    }
+
+    .memo-item.completed .memo-text {
+      text-decoration: line-through;
+      opacity: 0.45;
+    }
+
+    .memo-item.completed .check-btn {
+      color: var(--accent);
+    }
+
+    .memo-text {
+      font-size: 0.95rem;
+      line-height: 1.5;
+      color: var(--text-primary);
+      word-break: break-all;
+    }
+
+    .memo-time {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      opacity: 0.85;
+    }
+
+    .delete-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    /* Sub memo styling */
+    .sub-memo-container {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(255, 255, 255, 0.06);
+      margin-left: 4px;
+      padding-left: 12px;
+      border-left: 2px solid rgba(99, 102, 241, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sub-memo-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sub-memo-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.3);
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      animation: slideIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    .sub-check-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-right: 8px;
+      transition: color 0.2s ease, transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .sub-check-btn:hover {
+      color: var(--accent);
+      transform: scale(1.08);
+    }
+
+    .sub-check-btn:active {
+      transform: scale(0.92);
+    }
+
+    .sub-memo-item.completed .sub-memo-text {
+      text-decoration: line-through;
+      opacity: 0.45;
+    }
+
+    .sub-memo-item.completed .sub-check-btn {
+      color: var(--accent);
+    }
+
+    .sub-memo-text {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      word-break: break-all;
+      flex-grow: 1;
+    }
+    }
+
+    .sub-delete-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: color 0.2s ease;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sub-delete-btn:hover {
+      color: var(--danger);
+    }
+
+    .sub-memo-input-wrapper {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .sub-memo-input {
+      flex-grow: 1;
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.35);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-family: var(--font-main);
+      font-size: 0.8rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .sub-memo-input:focus {
+      border-color: var(--accent);
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    .sub-memo-add-btn {
+      background: rgba(99, 102, 241, 0.15);
+      border: none;
+      color: var(--accent);
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .sub-memo-add-btn:hover {
+      background: var(--accentGradient, var(--accent));
+      color: white;
+    }
+
+    .memo-header-wrapper {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    .memo-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .delete-btn:hover {
+      background: var(--danger-light);
+      color: var(--danger);
+      transform: scale(1.05);
+    }
+
+    .delete-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Outgoing animation */
+    .memo-item.removing {
+      animation: slideOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+
+    @keyframes slideOut {
+      to {
+        opacity: 0;
+        transform: translateX(30px);
+        height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin-bottom: -12px;
+        border-top-width: 0;
+        border-bottom-width: 0;
+        overflow: hidden;
+      }
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .empty-icon {
+      font-size: 2.5rem;
+      background: linear-gradient(135deg, #475569 0%, #64748b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .empty-text {
+      font-size: 0.9rem;
+      font-weight: 300;
+    }
+
+    /* Count indicator */
+    .footer-info {
+      margin-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--panel-border);
+      padding-top: 16px;
+    }
+
+    .clear-all-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: var(--font-main);
+      font-size: 0.8rem;
+      transition: color 0.2s ease;
+    }
+
+    .clear-all-btn:hover {
+      color: var(--danger);
+    }
+
+    /* Toast notification */
+    .toast {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .toast-text {
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    .undo-btn {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: color 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .undo-btn:hover {
+      color: #818cf8;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-circle"></div>
+  <div class="glow-circle-2"></div>
+
+  <div class="app-container">
+    <header>
+      <div class="logo-area">
+        <i class="fa-solid fa-feather-pointed logo-icon"></i>
+        <h1>Vibe Note</h1>
+      </div>
+      <p class="subtitle">일상과 아이디어를 간편하게 기록하세요</p>
+    </header>
+
+    <div class="input-form">
+      <div class="input-wrapper">
+        <input type="text" id="memoInput" class="memo-input" placeholder="새로운 메모를 입력하세요..." autocomplete="off">
+        <i class="fa-solid fa-pen-nib input-icon"></i>
+      </div>
+      <button id="addBtn" class="add-btn">
+        <i class="fa-solid fa-plus"></i>
+        추가
+      </button>
+    </div>
+
+    <div class="memo-list-container">
+      <ul id="memoList" class="memo-list">
+        <!-- Dynamic memo items will be added here -->
+      </ul>
+      <div id="emptyState" class="empty-state">
+        <i class="fa-regular fa-folder-open empty-icon"></i>
+        <p class="empty-text">작성된 메모가 없습니다.</p>
+      </div>
+    </div>
+
+    <div class="footer-info">
+      <div>전체 메모: <span id="memoCount" style="font-weight: 600; color: var(--accent);">0</span>개</div>
+      <button id="clearAllBtn" class="clear-all-btn">모두 지우기</button>
+    </div>
+
+    <!-- Toast notification for undo -->
+    <div id="toast" class="toast">
+      <span class="toast-text">메모가 삭제되었습니다.</span>
+      <button id="undoBtn" class="undo-btn">
+        <i class="fa-solid fa-rotate-left"></i>
+        되돌리기
+      </button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const memoInput = document.getElementById('memoInput');
+      const addBtn = document.getElementById('addBtn');
+      const memoList = document.getElementById('memoList');
+      const emptyState = document.getElementById('emptyState');
+      const memoCount = document.getElementById('memoCount');
+      const clearAllBtn = document.getElementById('clearAllBtn');
+
+      // Load memos from localStorage
+      let memos = JSON.parse(localStorage.getItem('memos')) || [];
+      
+      // Temporary storage for undo feature
+      let lastDeletedMemo = null;
+      let lastDeletedIndex = -1;
+      let toastTimeout = null;
+
+      // Save memos to localStorage
+      const saveMemos = () => {
+        localStorage.setItem('memos', JSON.stringify(memos));
+        updateUI();
+      };
+
+      // Update UI states (empty state, counts)
+      const updateUI = () => {
+        memoCount.textContent = memos.length;
+        if (memos.length === 0) {
+          emptyState.style.display = 'flex';
+          clearAllBtn.style.display = 'none';
+        } else {
+          emptyState.style.display = 'none';
+          clearAllBtn.style.display = 'block';
+        }
+      };
+
+      // Format timestamp to Korean date and time representation (e.g., "2026. 06. 03. 오후 9:30")
+      const formatTime = (timestamp) => {
+        if (!timestamp) return '';
+        const date = new Date(Number(timestamp));
+        if (isNaN(date.getTime())) return '';
+        
+        const dateStr = date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const timeStr = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: true });
+        
+        return `${dateStr} ${timeStr}`;
+      };
+
+      // Create and append a memo item in DOM
+      const createMemoElement = (memo) => {
+        const li = document.createElement('li');
+        li.className = 'memo-item';
+        li.style.flexDirection = 'column';
+        li.style.alignItems = 'stretch';
+        li.dataset.id = memo.id;
+        if (memo.completed) {
+          li.classList.add('completed');
+        }
+
+        // Memo Header Wrapper
+        const headerWrapper = document.createElement('div');
+        headerWrapper.className = 'memo-header-wrapper';
+
+        const checkBtn = document.createElement('button');
+        checkBtn.className = 'check-btn';
+        checkBtn.innerHTML = memo.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
+        checkBtn.title = memo.completed ? '미완료로 표시' : '완료로 표시';
+        checkBtn.addEventListener('click', () => {
+          memo.completed = !memo.completed;
+          saveMemos();
+          renderMemos();
+        });
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'memo-content-wrapper';
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'memo-text';
+        textSpan.textContent = memo.text;
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'memo-time';
+        const ts = memo.timestamp || memo.id;
+        timeSpan.innerHTML = `<i class="fa-regular fa-clock"></i> ${formatTime(ts)}`;
+
+        contentWrapper.appendChild(textSpan);
+        contentWrapper.appendChild(timeSpan);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'memo-actions';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
+        deleteBtn.title = '메모 삭제';
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteMemo(memo.id, li);
+        });
+
+        actionsDiv.appendChild(deleteBtn);
+        headerWrapper.appendChild(checkBtn);
+        headerWrapper.appendChild(contentWrapper);
+        headerWrapper.appendChild(actionsDiv);
+        li.appendChild(headerWrapper);
+
+        // Sub Memo Container
+        const subContainer = document.createElement('div');
+        subContainer.className = 'sub-memo-container';
+
+        const subList = document.createElement('ul');
+        subList.className = 'sub-memo-list';
+
+        const subMemos = memo.subMemos || [];
+        subMemos.forEach(sub => {
+          const subLi = document.createElement('li');
+          subLi.className = 'sub-memo-item';
+          if (sub.completed) {
+            subLi.classList.add('completed');
+          }
+
+          const subCheckBtn = document.createElement('button');
+          subCheckBtn.className = 'sub-check-btn';
+          subCheckBtn.innerHTML = sub.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
+          subCheckBtn.title = sub.completed ? '미완료로 표시' : '완료로 표시';
+          subCheckBtn.addEventListener('click', () => {
+            sub.completed = !sub.completed;
+            saveMemos();
+            renderMemos();
+          });
+
+          const subText = document.createElement('span');
+          subText.className = 'sub-memo-text';
+          subText.textContent = sub.text;
+
+          const subDelete = document.createElement('button');
+          subDelete.className = 'sub-delete-btn';
+          subDelete.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+          subDelete.title = '하위 항목 삭제';
+          subDelete.addEventListener('click', () => {
+            memo.subMemos = memo.subMemos.filter(s => s.id !== sub.id);
+            saveMemos();
+            renderMemos();
+          });
+
+          subLi.appendChild(subCheckBtn);
+          subLi.appendChild(subText);
+          subLi.appendChild(subDelete);
+          subList.appendChild(subLi);
+        });
+
+        subContainer.appendChild(subList);
+
+        // Sub Memo Input Wrapper
+        const subInputWrapper = document.createElement('div');
+        subInputWrapper.className = 'sub-memo-input-wrapper';
+
+        const subInput = document.createElement('input');
+        subInput.type = 'text';
+        subInput.className = 'sub-memo-input';
+        subInput.placeholder = '하위 항목 추가...';
+
+        const subAddBtn = document.createElement('button');
+        subAddBtn.className = 'sub-memo-add-btn';
+        subAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        subAddBtn.title = '하위 항목 추가';
+
+        const handleAddSub = () => {
+          const subTextVal = subInput.value.trim();
+          if (subTextVal) {
+            if (!memo.subMemos) memo.subMemos = [];
+            memo.subMemos.push({
+              id: Date.now().toString(),
+              text: subTextVal,
+              completed: false
+            });
+            saveMemos();
+            renderMemos();
+          }
+        };
+
+        subAddBtn.addEventListener('click', handleAddSub);
+        subInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            handleAddSub();
+          }
+        });
+
+        subInputWrapper.appendChild(subInput);
+        subInputWrapper.appendChild(subAddBtn);
+        subContainer.appendChild(subInputWrapper);
+
+        li.appendChild(subContainer);
+
+        return li;
+      };
+
+      // Render the entire list
+      const renderMemos = () => {
+        memoList.innerHTML = '';
+        memos.forEach(memo => {
+          const item = createMemoElement(memo);
+          memoList.appendChild(item);
+        });
+        updateUI();
+      };
+
+      // Add a new memo
+      const addMemo = () => {
+        const text = memoInput.value.trim();
+        if (!text) {
+          memoInput.focus();
+          return;
+        }
+
+        const now = Date.now();
+        const newMemo = {
+          id: now.toString(),
+          text: text,
+          timestamp: now,
+          completed: false,
+          subMemos: []
+        };
+
+        memos.unshift(newMemo); // Add to the top
+        saveMemos();
+
+        // Prepend and trigger animation
+        const item = createMemoElement(newMemo);
+        memoList.insertBefore(item, memoList.firstChild);
+
+        memoInput.value = '';
+        memoInput.focus();
+      };
+
+      // Toast control functions
+      const showToast = () => {
+        clearTimeout(toastTimeout);
+        const toast = document.getElementById('toast');
+        toast.classList.add('show');
+        
+        toastTimeout = setTimeout(() => {
+          toast.classList.remove('show');
+        }, 5000); // Auto-hide after 5 seconds
+      };
+
+      const hideToast = () => {
+        const toast = document.getElementById('toast');
+        toast.classList.remove('show');
+        clearTimeout(toastTimeout);
+      };
+
+      // Undo deletion
+      const undoDelete = () => {
+        if (lastDeletedMemo !== null && lastDeletedIndex !== -1) {
+          memos.splice(lastDeletedIndex, 0, lastDeletedMemo);
+          lastDeletedMemo = null;
+          lastDeletedIndex = -1;
+          saveMemos();
+          renderMemos();
+          hideToast();
+        }
+      };
+
+      // Delete a single memo with animation
+      const deleteMemo = (id, element) => {
+        element.classList.add('removing');
+        // Wait for slideOut animation to finish
+        element.addEventListener('animationend', (e) => {
+          if (e.animationName === 'slideOut') {
+            const index = memos.findIndex(memo => memo.id === id);
+            if (index !== -1) {
+              lastDeletedMemo = memos[index];
+              lastDeletedIndex = index;
+              memos.splice(index, 1);
+              saveMemos();
+              renderMemos();
+              showToast();
+            }
+          }
+        });
+      };
+
+      // Event Listeners
+      addBtn.addEventListener('click', addMemo);
+      memoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          addMemo();
+        }
+      });
+
+      clearAllBtn.addEventListener('click', () => {
+        if (confirm('모든 메모를 삭제하시겠습니까?')) {
+          memos = [];
+          lastDeletedMemo = null;
+          lastDeletedIndex = -1;
+          hideToast();
+          saveMemos();
+          renderMemos();
+        }
+      });
+
+      document.getElementById('undoBtn').addEventListener('click', undoDelete);
+
+      // Initial render
+      renderMemos();
+    });
+  </script>
+</body>
+</html>
