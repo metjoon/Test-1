@@ -844,46 +844,61 @@
       function setupAuth() {
         if (!supabase) return;
 
-        // 환경 체크
+        // 깨끗한 리다이렉트 URL 생성 (해시나 파라미터 제거)
+        const getCleanUrl = () => {
+          const url = new URL(window.location.href);
+          url.hash = '';
+          url.search = '';
+          return url.toString();
+        };
+
         if (window.location.protocol === 'file:') {
-          alert('경고: 현재 "로컬 파일(file://)" 환경에서 실행 중입니다.\n구글 로그인을 사용하려면 Live Server 등을 통해 "http://" 환경으로 접속해야 합니다.');
+          alert('경고: 현재 "로컬 파일(file://)" 환경입니다.\n구글 로그인을 사용하려면 반드시 Live Server 등으로 접속하세요.');
         }
 
-        // Check current session
+        // 초기 세션 확인
         supabase.auth.getSession().then(({ data: { session }, error }) => {
-          if (error) {
-            console.error('Session load error:', error.message);
-          }
+          if (error) console.error('세션 확인 중 오류:', error.message);
           updateAuthUI(session?.user || null);
         });
 
-        // Listen for auth changes
-        supabase.auth.onAuthStateChange((_event, session) => {
+        // 상태 변화 실시간 감시 (로그아웃 즉시 반영)
+        supabase.auth.onAuthStateChange((event, session) => {
+          console.log('Auth event:', event);
           updateAuthUI(session?.user || null);
+          
+          if (event === 'SIGNED_IN') {
+            console.log('로그인 성공!');
+            loadMemos(); // 로그인 시 데이터 다시 불러오기
+          }
         });
 
         // Login Handler
         googleLoginBtn.addEventListener('click', async () => {
           try {
+            console.log('로그인 시도 중... 리다이렉트 주소:', getCleanUrl());
             const { error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
-                redirectTo: window.location.href
+                redirectTo: getCleanUrl()
               }
             });
-            if (error) {
-              alert('구글 로그인 실패:\n' + error.message);
-              console.error('Login error:', error.message);
-            }
+            if (error) throw error;
           } catch (err) {
-            alert('로그인 시도 중 예외 발생:\n' + err.message);
+            alert('로그인 실패:\n' + err.message);
+            console.error('Login error:', err);
           }
         });
 
         // Logout Handler
         logoutBtn.addEventListener('click', async () => {
-          const { error } = await supabase.auth.signOut();
-          if (error) alert('로그아웃 실패:\n' + error.message);
+          try {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+            console.log('로그아웃 완료');
+          } catch (err) {
+            alert('로그아웃 실패:\n' + err.message);
+          }
         });
       }
 
