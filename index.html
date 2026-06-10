@@ -661,6 +661,71 @@
       color: #f87171;
       border-color: rgba(248, 113, 113, 0.2);
     }
+
+    /* Auth Styles */
+    .auth-container {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .google-login-btn {
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid #e5e7eb;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .google-login-btn:hover {
+      background: #f9fafb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .user-profile {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 6px 6px 14px;
+      border-radius: 30px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .user-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .logout-btn {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(248, 113, 113, 0.1);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .logout-btn:hover {
+      background: var(--danger);
+      color: white;
+    }
+
     .status-dot {
       width: 6px;
       height: 6px;
@@ -685,6 +750,17 @@
       <div id="dbStatus" class="db-status-badge offline">
         <span class="status-dot"></span>
         <span class="status-text">연결 중...</span>
+      </div>
+
+      <div class="auth-container">
+        <button id="googleLoginBtn" class="google-login-btn">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="Google logo">
+          Google로 로그인
+        </button>
+        <div id="userProfile" class="user-profile">
+          <span id="userName" class="user-name">사용자님</span>
+          <button id="logoutBtn" class="logout-btn">로그아웃</button>
+        </div>
       </div>
     </header>
 
@@ -732,6 +808,10 @@
       const emptyState = document.getElementById('emptyState');
       const memoCount = document.getElementById('memoCount');
       const clearAllBtn = document.getElementById('clearAllBtn');
+      const googleLoginBtn = document.getElementById('googleLoginBtn');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const userProfile = document.getElementById('userProfile');
+      const userNameSpan = document.getElementById('userName');
 
       // Supabase Configuration
       const supabaseUrl = 'https://wrlnnplqmmepcyvjrksp.supabase.co';
@@ -754,9 +834,80 @@
         if (window.supabase) {
           supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
           setupRealtime();
+          setupAuth();
         }
       } catch (err) {
         console.error('Supabase initialization failed:', err);
+      }
+
+      function setupAuth() {
+        if (!supabase) return;
+
+        // 깨끗한 기본 URL (http://127.0.0.1:5500/index.html 등)
+        const cleanUrl = window.location.origin + window.location.pathname;
+
+        // 1. 페이지 로드 시 주소창의 토큰 정보(#access_token 등) 즉시 제거
+        if (window.location.hash.includes('access_token')) {
+          window.history.replaceState(null, '', cleanUrl);
+        }
+
+        // 초기 세션 확인
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          updateAuthUI(session?.user || null);
+          if (session?.user) loadMemos();
+        });
+
+        // 인증 상태 변화 감시
+        supabase.auth.onAuthStateChange((event, session) => {
+          updateAuthUI(session?.user || null);
+          if (event === 'SIGNED_IN') {
+            loadMemos();
+          }
+          if (event === 'SIGNED_OUT') {
+            window.location.href = cleanUrl;
+          }
+        });
+
+        // Login Handler
+        googleLoginBtn.onclick = async () => {
+          try {
+            const { error } = await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo: cleanUrl
+              }
+            });
+            if (error) throw error;
+          } catch (err) {
+            alert('로그인 실패: ' + err.message);
+          }
+        };
+
+        // Logout Handler
+        logoutBtn.onclick = async () => {
+          try {
+            Object.keys(localStorage).forEach(key => {
+              if (key.includes('supabase.auth.token')) {
+                localStorage.removeItem(key);
+              }
+            });
+            await supabase.auth.signOut();
+            window.location.href = cleanUrl;
+          } catch (err) {
+            window.location.href = cleanUrl;
+          }
+        };
+      }
+
+      function updateAuthUI(user) {
+        if (user) {
+          googleLoginBtn.style.display = 'none';
+          userProfile.style.display = 'flex';
+          userNameSpan.textContent = `${user.user_metadata.full_name || '사용자'}님`;
+        } else {
+          googleLoginBtn.style.display = 'flex';
+          userProfile.style.display = 'none';
+        }
       }
 
       let memos = [];
@@ -786,13 +937,9 @@
         const { eventType, new: newRecord, old: oldRecord } = payload;
 
         if (eventType === 'INSERT') {
-          // Check if it already exists (optimistic update might have added it)
           if (!memos.find(m => m.id === newRecord.id)) {
             memos.unshift({
-              id: newRecord.id,
-              text: newRecord.text,
-              completed: newRecord.completed,
-              timestamp: newRecord.timestamp,
+              ...newRecord,
               subMemos: newRecord.subMemos || []
             });
             renderMemos();
@@ -800,15 +947,11 @@
         } else if (eventType === 'UPDATE') {
           const index = memos.findIndex(m => m.id === newRecord.id);
           if (index !== -1) {
-            // Check if data is actually different to avoid unnecessary re-renders
-            const current = memos[index];
-            if (JSON.stringify(current) !== JSON.stringify(newRecord)) {
-              memos[index] = {
-                ...newRecord,
-                subMemos: newRecord.subMemos || []
-              };
-              renderMemos();
-            }
+            memos[index] = {
+              ...newRecord,
+              subMemos: newRecord.subMemos || []
+            };
+            renderMemos();
           }
         } else if (eventType === 'DELETE') {
           const index = memos.findIndex(m => m.id === oldRecord.id);
@@ -824,7 +967,6 @@
       let lastDeletedIndex = -1;
       let toastTimeout = null;
 
-      // Update UI states (empty state, counts)
       const updateUI = () => {
         memoCount.textContent = memos.length;
         if (memos.length === 0) {
@@ -836,13 +978,11 @@
         }
       };
 
-      // Load memos from Supabase with LocalStorage fallback
       const loadMemos = async () => {
         updateStatusBadge('offline', '연결 중...');
         if (!supabase) {
-          console.warn('Supabase client is not available. Loading from localStorage.');
           memos = JSON.parse(localStorage.getItem('memos')) || [];
-          updateStatusBadge('offline', '로컬 저장소 사용 중');
+          updateStatusBadge('offline', '로컬 모드');
           renderMemos();
           return;
         }
@@ -856,27 +996,22 @@
           if (error) throw error;
 
           memos = data.map(item => ({
-            id: item.id,
-            text: item.text,
-            completed: item.completed,
-            timestamp: item.timestamp,
+            ...item,
             subMemos: item.subMemos || []
           }));
           isSupabaseOnline = true;
           updateStatusBadge('online', 'Supabase 동기화 됨');
         } catch (err) {
-          console.error('Failed to load memos from Supabase:', err);
+          console.error('Failed to load memos:', err);
           memos = JSON.parse(localStorage.getItem('memos')) || [];
           isSupabaseOnline = false;
-          updateStatusBadge('error', '동기화 실패 (로컬 모드)');
+          updateStatusBadge('error', '동기화 실패');
         }
         renderMemos();
         initSortable();
       };
 
-      // Save/Sync memos to Supabase and LocalStorage
       const saveMemos = async (action, memoData = null) => {
-        // Always update localStorage first as a backup
         localStorage.setItem('memos', JSON.stringify(memos));
         updateUI();
 
@@ -904,7 +1039,6 @@
             const { error } = await supabase.from('memos').delete().eq('id', memoData.id);
             if (error) throw error;
           } else if (action === 'clearAll') {
-            // Deletes all records in the table
             const { error } = await supabase.from('memos').delete().neq('id', '0');
             if (error) throw error;
           }
@@ -916,178 +1050,110 @@
         } catch (err) {
           console.error(`Supabase sync error on [${action}]:`, err);
           isSupabaseOnline = false;
-          updateStatusBadge('error', '동기화 실패 (로컬 저장됨)');
+          updateStatusBadge('error', '동기화 실패');
         }
       };
 
-      // Format timestamp to Korean date and time representation (e.g., "2026. 06. 03. 오후 9:30")
       const formatTime = (timestamp) => {
         if (!timestamp) return '';
         const date = new Date(Number(timestamp));
         if (isNaN(date.getTime())) return '';
-        
-        const dateStr = date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
-        const timeStr = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: true });
-        
-        return `${dateStr} ${timeStr}`;
+        return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' ' + 
+               date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: true });
       };
 
-      // Create and append a memo item in DOM
       const createMemoElement = (memo) => {
         const li = document.createElement('li');
         li.className = 'memo-item';
         li.style.flexDirection = 'column';
         li.style.alignItems = 'stretch';
         li.dataset.id = memo.id;
-        if (memo.completed) {
-          li.classList.add('completed');
-        }
+        if (memo.completed) li.classList.add('completed');
 
-        // Memo Header Wrapper
         const headerWrapper = document.createElement('div');
         headerWrapper.className = 'memo-header-wrapper';
 
         const dragHandle = document.createElement('div');
         dragHandle.className = 'drag-handle';
         dragHandle.innerHTML = '<i class="fa-solid fa-grip-lines"></i>';
-        dragHandle.title = '드래그하여 순서 변경';
 
         const checkBtn = document.createElement('button');
         checkBtn.className = 'check-btn';
         checkBtn.innerHTML = memo.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
-        checkBtn.title = memo.completed ? '미완료로 표시' : '완료로 표시';
-        checkBtn.addEventListener('click', () => {
-          memo.completed = !memo.completed;
-          saveMemos('update', memo);
-          renderMemos();
-        });
+        checkBtn.onclick = () => { memo.completed = !memo.completed; saveMemos('update', memo); renderMemos(); };
 
         const contentWrapper = document.createElement('div');
         contentWrapper.className = 'memo-content-wrapper';
-
         const textSpan = document.createElement('span');
         textSpan.className = 'memo-text';
         textSpan.textContent = memo.text;
-
         const timeSpan = document.createElement('span');
         timeSpan.className = 'memo-time';
-        const ts = memo.timestamp || memo.id;
-        timeSpan.innerHTML = `<i class="fa-regular fa-clock"></i> ${formatTime(ts)}`;
-
+        timeSpan.innerHTML = `<i class="fa-regular fa-clock"></i> ${formatTime(memo.timestamp || memo.id)}`;
         contentWrapper.appendChild(textSpan);
         contentWrapper.appendChild(timeSpan);
 
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'memo-actions';
-
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
-        deleteBtn.title = '메모 삭제';
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          deleteMemo(memo.id, li);
-        });
-
+        deleteBtn.onclick = (e) => { e.stopPropagation(); deleteMemo(memo.id, li); };
         actionsDiv.appendChild(deleteBtn);
-        headerWrapper.appendChild(dragHandle); // Add drag handle
+
+        headerWrapper.appendChild(dragHandle);
         headerWrapper.appendChild(checkBtn);
         headerWrapper.appendChild(contentWrapper);
         headerWrapper.appendChild(actionsDiv);
         li.appendChild(headerWrapper);
 
-        // Sub Memo Container
         const subContainer = document.createElement('div');
         subContainer.className = 'sub-memo-container';
-
         const subList = document.createElement('ul');
         subList.className = 'sub-memo-list';
-
-        const subMemos = memo.subMemos || [];
-        subMemos.forEach(sub => {
+        (memo.subMemos || []).forEach(sub => {
           const subLi = document.createElement('li');
           subLi.className = 'sub-memo-item';
-          if (sub.completed) {
-            subLi.classList.add('completed');
-          }
-
-          const subCheckBtn = document.createElement('button');
-          subCheckBtn.className = 'sub-check-btn';
-          subCheckBtn.innerHTML = sub.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
-          subCheckBtn.title = sub.completed ? '미완료로 표시' : '완료로 표시';
-          subCheckBtn.addEventListener('click', () => {
-            sub.completed = !sub.completed;
-            saveMemos('update', memo);
-            renderMemos();
-          });
-
-          const subText = document.createElement('span');
-          subText.className = 'sub-memo-text';
-          subText.textContent = sub.text;
-
-          const subDelete = document.createElement('button');
-          subDelete.className = 'sub-delete-btn';
-          subDelete.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-          subDelete.title = '하위 항목 삭제';
-          subDelete.addEventListener('click', () => {
-            memo.subMemos = memo.subMemos.filter(s => s.id !== sub.id);
-            saveMemos('update', memo);
-            renderMemos();
-          });
-
-          subLi.appendChild(subCheckBtn);
-          subLi.appendChild(subText);
-          subLi.appendChild(subDelete);
+          if (sub.completed) subLi.classList.add('completed');
+          const scb = document.createElement('button');
+          scb.className = 'sub-check-btn';
+          scb.innerHTML = sub.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
+          scb.onclick = () => { sub.completed = !sub.completed; saveMemos('update', memo); renderMemos(); };
+          const st = document.createElement('span');
+          st.className = 'sub-memo-text';
+          st.textContent = sub.text;
+          const sd = document.createElement('button');
+          sd.className = 'sub-delete-btn';
+          sd.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+          sd.onclick = () => { memo.subMemos = memo.subMemos.filter(s => s.id !== sub.id); saveMemos('update', memo); renderMemos(); };
+          subLi.appendChild(scb); subLi.appendChild(st); subLi.appendChild(sd);
           subList.appendChild(subLi);
         });
-
         subContainer.appendChild(subList);
 
-        // Sub Memo Input Wrapper
-        const subInputWrapper = document.createElement('div');
-        subInputWrapper.className = 'sub-memo-input-wrapper';
-
-        const subInput = document.createElement('input');
-        subInput.type = 'text';
-        subInput.className = 'sub-memo-input';
-        subInput.placeholder = '하위 항목 추가...';
-
-        const subAddBtn = document.createElement('button');
-        subAddBtn.className = 'sub-memo-add-btn';
-        subAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-        subAddBtn.title = '하위 항목 추가';
-
-        const handleAddSub = () => {
-          const subTextVal = subInput.value.trim();
-          if (subTextVal) {
+        const siw = document.createElement('div');
+        siw.className = 'sub-memo-input-wrapper';
+        const si = document.createElement('input');
+        si.type = 'text'; si.className = 'sub-memo-input'; si.placeholder = '하위 항목 추가...';
+        const sab = document.createElement('button');
+        sab.className = 'sub-memo-add-btn'; sab.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        const has = () => {
+          const val = si.value.trim();
+          if (val) {
             if (!memo.subMemos) memo.subMemos = [];
-            memo.subMemos.push({
-              id: Date.now().toString(),
-              text: subTextVal,
-              completed: false
-            });
-            saveMemos('update', memo);
-            renderMemos();
+            memo.subMemos.push({ id: Date.now().toString(), text: val, completed: false });
+            saveMemos('update', memo); renderMemos();
           }
         };
-
-        subAddBtn.addEventListener('click', handleAddSub);
-        subInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            handleAddSub();
-          }
-        });
-
-        subInputWrapper.appendChild(subInput);
-        subInputWrapper.appendChild(subAddBtn);
-        subContainer.appendChild(subInputWrapper);
-
+        sab.onclick = has;
+        si.onkeydown = (e) => { if (e.key === 'Enter') has(); };
+        siw.appendChild(si); siw.appendChild(sab);
+        subContainer.appendChild(siw);
         li.appendChild(subContainer);
 
         return li;
       };
 
-      // Initialize SortableJS
       const initSortable = () => {
         new Sortable(memoList, {
           handle: '.drag-handle',
@@ -1096,144 +1162,73 @@
           onEnd: async (evt) => {
             const { oldIndex, newIndex } = evt;
             if (oldIndex === newIndex) return;
-
-            // Reorder memos array
             const movedItem = memos.splice(oldIndex, 1)[0];
             memos.splice(newIndex, 0, movedItem);
-
-            // Update timestamp to persist order (memos are sorted by timestamp DESC)
-            let newTimestamp;
-            if (newIndex === 0) {
-              // Moved to top: new timestamp = top item's timestamp + 1000
-              newTimestamp = Number(memos[1].timestamp) + 1000;
-            } else if (newIndex === memos.length - 1) {
-              // Moved to bottom: new timestamp = bottom item's timestamp - 1000
-              newTimestamp = Number(memos[memos.length - 2].timestamp) - 1000;
-            } else {
-              // Moved to middle: average of neighbors
-              const prevTs = Number(memos[newIndex - 1].timestamp);
-              const nextTs = Number(memos[newIndex + 1].timestamp);
-              newTimestamp = Math.floor((prevTs + nextTs) / 2);
-            }
-
-            movedItem.timestamp = newTimestamp;
-            
-            // Sync with Supabase
+            if (newIndex === 0) movedItem.timestamp = Number(memos[1].timestamp) + 1000;
+            else if (newIndex === memos.length - 1) movedItem.timestamp = Number(memos[memos.length - 2].timestamp) - 1000;
+            else movedItem.timestamp = Math.floor((Number(memos[newIndex - 1].timestamp) + Number(memos[newIndex + 1].timestamp)) / 2);
             await saveMemos('update', movedItem);
-            renderMemos(); // Re-render to ensure everything is in sync
+            renderMemos();
           }
         });
       };
 
-      // Render the entire list
       const renderMemos = () => {
         memoList.innerHTML = '';
-        memos.forEach(memo => {
-          const item = createMemoElement(memo);
-          memoList.appendChild(item);
-        });
+        memos.forEach(memo => memoList.appendChild(createMemoElement(memo)));
         updateUI();
       };
 
-      // Add a new memo
       const addMemo = () => {
         const text = memoInput.value.trim();
-        if (!text) {
-          memoInput.focus();
-          return;
-        }
-
+        if (!text) { memoInput.focus(); return; }
         const now = Date.now();
-        const newMemo = {
-          id: now.toString(),
-          text: text,
-          timestamp: now,
-          completed: false,
-          subMemos: []
-        };
-
-        memos.unshift(newMemo); // Add to the top
+        const newMemo = { id: now.toString(), text: text, timestamp: now, completed: false, subMemos: [] };
+        memos.unshift(newMemo);
         saveMemos('insert', newMemo);
-
-        // Prepend and trigger animation
-        const item = createMemoElement(newMemo);
-        memoList.insertBefore(item, memoList.firstChild);
-
-        memoInput.value = '';
-        memoInput.focus();
+        memoList.insertBefore(createMemoElement(newMemo), memoList.firstChild);
+        memoInput.value = ''; memoInput.focus();
       };
 
-      // Toast control functions
-      const showToast = () => {
-        clearTimeout(toastTimeout);
-        const toast = document.getElementById('toast');
-        toast.classList.add('show');
-        
-        toastTimeout = setTimeout(() => {
-          toast.classList.remove('show');
-        }, 5000); // Auto-hide after 5 seconds
-      };
-
-      const hideToast = () => {
-        const toast = document.getElementById('toast');
-        toast.classList.remove('show');
-        clearTimeout(toastTimeout);
-      };
-
-      // Undo deletion
-      const undoDelete = () => {
-        if (lastDeletedMemo !== null && lastDeletedIndex !== -1) {
-          memos.splice(lastDeletedIndex, 0, lastDeletedMemo);
-          const memoToRestore = lastDeletedMemo;
-          lastDeletedMemo = null;
-          lastDeletedIndex = -1;
-          saveMemos('insert', memoToRestore);
-          renderMemos();
-          hideToast();
-        }
-      };
-
-      // Delete a single memo with animation
       const deleteMemo = (id, element) => {
         element.classList.add('removing');
-        // Wait for slideOut animation to finish
         element.addEventListener('animationend', (e) => {
           if (e.animationName === 'slideOut') {
             const index = memos.findIndex(memo => memo.id === id);
             if (index !== -1) {
-              lastDeletedMemo = memos[index];
-              lastDeletedIndex = index;
+              lastDeletedMemo = memos[index]; lastDeletedIndex = index;
               memos.splice(index, 1);
               saveMemos('delete', lastDeletedMemo);
-              renderMemos();
-              showToast();
+              renderMemos(); showToast();
             }
           }
         });
       };
 
-      // Event Listeners
-      addBtn.addEventListener('click', addMemo);
-      memoInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          addMemo();
-        }
-      });
+      const showToast = () => {
+        clearTimeout(toastTimeout);
+        document.getElementById('toast').classList.add('show');
+        toastTimeout = setTimeout(() => document.getElementById('toast').classList.remove('show'), 5000);
+      };
 
-      clearAllBtn.addEventListener('click', () => {
+      const undoDelete = () => {
+        if (lastDeletedMemo) {
+          memos.splice(lastDeletedIndex, 0, lastDeletedMemo);
+          saveMemos('insert', lastDeletedMemo);
+          lastDeletedMemo = null; renderMemos();
+          document.getElementById('toast').classList.remove('show');
+        }
+      };
+
+      addBtn.onclick = addMemo;
+      memoInput.onkeydown = (e) => { if (e.key === 'Enter') addMemo(); };
+      clearAllBtn.onclick = () => {
         if (confirm('모든 메모를 삭제하시겠습니까?')) {
-          memos = [];
-          lastDeletedMemo = null;
-          lastDeletedIndex = -1;
-          hideToast();
-          saveMemos('clearAll');
-          renderMemos();
+          memos = []; saveMemos('clearAll'); renderMemos();
         }
-      });
+      };
+      document.getElementById('undoBtn').onclick = undoDelete;
 
-      document.getElementById('undoBtn').addEventListener('click', undoDelete);
-
-      // Load memos from Supabase
       loadMemos();
     });
   </script>
