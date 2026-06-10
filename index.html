@@ -1012,14 +1012,18 @@
           const user_id = session?.user?.id || null;
 
           if (action === 'insert' && memoData) {
-            const { error } = await supabase.from('memos').insert({
+            const insertData = {
               id: memoData.id,
               text: memoData.text,
               completed: memoData.completed,
               timestamp: memoData.timestamp,
-              subMemos: memoData.subMemos || [],
-              user_id: user_id
-            });
+              subMemos: memoData.subMemos || []
+            };
+            
+            // 로그인 상태일 때만 user_id 포함
+            if (user_id) insertData.user_id = user_id;
+
+            const { error } = await supabase.from('memos').insert(insertData);
             if (error) throw error;
           } else if (action === 'update' && memoData) {
             const { error } = await supabase.from('memos').update({
@@ -1033,7 +1037,6 @@
             const { error } = await supabase.from('memos').delete().eq('id', memoData.id);
             if (error) throw error;
           } else if (action === 'clearAll') {
-            // Deletes all records in the table
             const { error } = await supabase.from('memos').delete().neq('id', '0');
             if (error) throw error;
           }
@@ -1043,9 +1046,14 @@
             updateStatusBadge('online', 'Supabase 동기화 됨');
           }
         } catch (err) {
-          console.error(`Supabase sync error on [${action}]:`, err);
+          console.error(`Supabase sync error on [${action}]:`, err.message || err);
           isSupabaseOnline = false;
           updateStatusBadge('error', '동기화 실패 (로컬 저장됨)');
+          
+          // 개발자 도구(F12) 콘솔에서 실제 에러 확인 가능
+          if (err.message && err.message.includes('column "user_id" does not exist')) {
+            console.error('해결 방법: Supabase "memos" 테이블에 "user_id" 컬럼(uuid 또는 text 타입)을 추가해야 합니다.');
+          }
         }
       };
 
