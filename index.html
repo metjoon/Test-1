@@ -843,6 +843,11 @@
       function setupAuth() {
         if (!supabase) return;
 
+        // 환경 체크
+        if (window.location.protocol === 'file:') {
+          console.warn('주의: 구글 로그인은 http/https 환경에서만 작동합니다. Live Server 등을 사용해 주세요.');
+        }
+
         // Check current session
         supabase.auth.getSession().then(({ data: { session } }) => {
           updateAuthUI(session?.user || null);
@@ -855,19 +860,27 @@
 
         // Login Handler
         googleLoginBtn.addEventListener('click', async () => {
-          const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-              redirectTo: window.location.href
+          try {
+            const { error } = await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo: window.location.href
+              }
+            });
+            if (error) {
+              alert('로그인 실패: ' + error.message);
+              console.error('Login error:', error.message);
             }
-          });
-          if (error) console.error('Login error:', error.message);
+          } catch (err) {
+            alert('로그인 오류가 발생했습니다. 개발자 도구(F12)를 확인해 주세요.');
+            console.error(err);
+          }
         });
 
         // Logout Handler
         logoutBtn.addEventListener('click', async () => {
           const { error } = await supabase.auth.signOut();
-          if (error) console.error('Logout error:', error.message);
+          if (error) alert('로그아웃 실패: ' + error.message);
         });
       }
 
@@ -917,7 +930,7 @@
               completed: newRecord.completed,
               timestamp: newRecord.timestamp,
               subMemos: newRecord.subMemos || [],
-              user_id: newRecord.user_id
+              user_id: newRecord.user_id || null
             });
             renderMemos();
           }
@@ -985,7 +998,7 @@
             completed: item.completed,
             timestamp: item.timestamp,
             subMemos: item.subMemos || [],
-            user_id: item.user_id
+            user_id: item.user_id || null
           }));
           isSupabaseOnline = true;
           updateStatusBadge('online', 'Supabase 동기화 됨');
@@ -1008,9 +1021,6 @@
         if (!supabase) return;
 
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const user_id = session?.user?.id || null;
-
           if (action === 'insert' && memoData) {
             const insertData = {
               id: memoData.id,
@@ -1019,9 +1029,6 @@
               timestamp: memoData.timestamp,
               subMemos: memoData.subMemos || []
             };
-            
-            // 로그인 상태일 때만 user_id 포함
-            if (user_id) insertData.user_id = user_id;
 
             const { error } = await supabase.from('memos').insert(insertData);
             if (error) throw error;
@@ -1049,11 +1056,6 @@
           console.error(`Supabase sync error on [${action}]:`, err.message || err);
           isSupabaseOnline = false;
           updateStatusBadge('error', '동기화 실패 (로컬 저장됨)');
-          
-          // 개발자 도구(F12) 콘솔에서 실제 에러 확인 가능
-          if (err.message && err.message.includes('column "user_id" does not exist')) {
-            console.error('해결 방법: Supabase "memos" 테이블에 "user_id" 컬럼(uuid 또는 text 타입)을 추가해야 합니다.');
-          }
         }
       };
 
