@@ -661,6 +661,71 @@
       color: #f87171;
       border-color: rgba(248, 113, 113, 0.2);
     }
+    
+    /* Auth Styles */
+    .auth-container {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .google-login-btn {
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid #e5e7eb;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .google-login-btn:hover {
+      background: #f9fafb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .user-profile {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 6px 6px 6px 14px;
+      border-radius: 30px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .user-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .logout-btn {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(248, 113, 113, 0.1);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .logout-btn:hover {
+      background: var(--danger);
+      color: white;
+    }
+
     .status-dot {
       width: 6px;
       height: 6px;
@@ -685,6 +750,17 @@
       <div id="dbStatus" class="db-status-badge offline">
         <span class="status-dot"></span>
         <span class="status-text">연결 중...</span>
+      </div>
+
+      <div class="auth-container">
+        <button id="googleLoginBtn" class="google-login-btn">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="Google logo">
+          Google로 로그인
+        </button>
+        <div id="userProfile" class="user-profile">
+          <span id="userName" class="user-name">사용자님</span>
+          <button id="logoutBtn" class="logout-btn">로그아웃</button>
+        </div>
       </div>
     </header>
 
@@ -732,6 +808,10 @@
       const emptyState = document.getElementById('emptyState');
       const memoCount = document.getElementById('memoCount');
       const clearAllBtn = document.getElementById('clearAllBtn');
+      const googleLoginBtn = document.getElementById('googleLoginBtn');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const userProfile = document.getElementById('userProfile');
+      const userNameSpan = document.getElementById('userName');
 
       // Supabase Configuration
       const supabaseUrl = 'https://wrlnnplqmmepcyvjrksp.supabase.co';
@@ -754,9 +834,52 @@
         if (window.supabase) {
           supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
           setupRealtime();
+          setupAuth();
         }
       } catch (err) {
         console.error('Supabase initialization failed:', err);
+      }
+
+      function setupAuth() {
+        if (!supabase) return;
+
+        // Check current session
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          updateAuthUI(session?.user || null);
+        });
+
+        // Listen for auth changes
+        supabase.auth.onAuthStateChange((_event, session) => {
+          updateAuthUI(session?.user || null);
+        });
+
+        // Login Handler
+        googleLoginBtn.addEventListener('click', async () => {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: window.location.origin
+            }
+          });
+          if (error) console.error('Login error:', error.message);
+        });
+
+        // Logout Handler
+        logoutBtn.addEventListener('click', async () => {
+          const { error } = await supabase.auth.signOut();
+          if (error) console.error('Logout error:', error.message);
+        });
+      }
+
+      function updateAuthUI(user) {
+        if (user) {
+          googleLoginBtn.style.display = 'none';
+          userProfile.style.display = 'flex';
+          userNameSpan.textContent = `${user.user_metadata.full_name || '사용자'}님`;
+        } else {
+          googleLoginBtn.style.display = 'flex';
+          userProfile.style.display = 'none';
+        }
       }
 
       let memos = [];
@@ -793,7 +916,8 @@
               text: newRecord.text,
               completed: newRecord.completed,
               timestamp: newRecord.timestamp,
-              subMemos: newRecord.subMemos || []
+              subMemos: newRecord.subMemos || [],
+              user_id: newRecord.user_id
             });
             renderMemos();
           }
@@ -860,7 +984,8 @@
             text: item.text,
             completed: item.completed,
             timestamp: item.timestamp,
-            subMemos: item.subMemos || []
+            subMemos: item.subMemos || [],
+            user_id: item.user_id
           }));
           isSupabaseOnline = true;
           updateStatusBadge('online', 'Supabase 동기화 됨');
@@ -883,13 +1008,17 @@
         if (!supabase) return;
 
         try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const user_id = session?.user?.id || null;
+
           if (action === 'insert' && memoData) {
             const { error } = await supabase.from('memos').insert({
               id: memoData.id,
               text: memoData.text,
               completed: memoData.completed,
               timestamp: memoData.timestamp,
-              subMemos: memoData.subMemos || []
+              subMemos: memoData.subMemos || [],
+              user_id: user_id
             });
             if (error) throw error;
           } else if (action === 'update' && memoData) {
