@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Supabase JS SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- SortableJS for Drag and Drop -->
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <style>
     :root {
       --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
@@ -459,6 +461,32 @@
       color: white;
     }
 
+    /* Drag and Drop styles */
+    .sortable-ghost {
+      opacity: 0.4;
+      background: var(--accent-gradient) !important;
+      border: 2px dashed var(--accent) !important;
+    }
+
+    .drag-handle {
+      cursor: grab;
+      color: var(--text-secondary);
+      padding: 0 12px 0 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s ease;
+      font-size: 0.9rem;
+    }
+
+    .drag-handle:hover {
+      color: var(--accent);
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
     .memo-header-wrapper {
       display: flex;
       justify-content: space-between;
@@ -843,6 +871,7 @@
           updateStatusBadge('error', '동기화 실패 (로컬 모드)');
         }
         renderMemos();
+        initSortable();
       };
 
       // Save/Sync memos to Supabase and LocalStorage
@@ -867,6 +896,7 @@
             const { error } = await supabase.from('memos').update({
               text: memoData.text,
               completed: memoData.completed,
+              timestamp: memoData.timestamp,
               subMemos: memoData.subMemos || []
             }).eq('id', memoData.id);
             if (error) throw error;
@@ -917,6 +947,11 @@
         const headerWrapper = document.createElement('div');
         headerWrapper.className = 'memo-header-wrapper';
 
+        const dragHandle = document.createElement('div');
+        dragHandle.className = 'drag-handle';
+        dragHandle.innerHTML = '<i class="fa-solid fa-grip-lines"></i>';
+        dragHandle.title = '드래그하여 순서 변경';
+
         const checkBtn = document.createElement('button');
         checkBtn.className = 'check-btn';
         checkBtn.innerHTML = memo.completed ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-regular fa-circle"></i>';
@@ -955,6 +990,7 @@
         });
 
         actionsDiv.appendChild(deleteBtn);
+        headerWrapper.appendChild(dragHandle); // Add drag handle
         headerWrapper.appendChild(checkBtn);
         headerWrapper.appendChild(contentWrapper);
         headerWrapper.appendChild(actionsDiv);
@@ -1049,6 +1085,44 @@
         li.appendChild(subContainer);
 
         return li;
+      };
+
+      // Initialize SortableJS
+      const initSortable = () => {
+        new Sortable(memoList, {
+          handle: '.drag-handle',
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          onEnd: async (evt) => {
+            const { oldIndex, newIndex } = evt;
+            if (oldIndex === newIndex) return;
+
+            // Reorder memos array
+            const movedItem = memos.splice(oldIndex, 1)[0];
+            memos.splice(newIndex, 0, movedItem);
+
+            // Update timestamp to persist order (memos are sorted by timestamp DESC)
+            let newTimestamp;
+            if (newIndex === 0) {
+              // Moved to top: new timestamp = top item's timestamp + 1000
+              newTimestamp = Number(memos[1].timestamp) + 1000;
+            } else if (newIndex === memos.length - 1) {
+              // Moved to bottom: new timestamp = bottom item's timestamp - 1000
+              newTimestamp = Number(memos[memos.length - 2].timestamp) - 1000;
+            } else {
+              // Moved to middle: average of neighbors
+              const prevTs = Number(memos[newIndex - 1].timestamp);
+              const nextTs = Number(memos[newIndex + 1].timestamp);
+              newTimestamp = Math.floor((prevTs + nextTs) / 2);
+            }
+
+            movedItem.timestamp = newTimestamp;
+            
+            // Sync with Supabase
+            await saveMemos('update', movedItem);
+            renderMemos(); // Re-render to ensure everything is in sync
+          }
+        });
       };
 
       // Render the entire list
