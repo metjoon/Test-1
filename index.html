@@ -725,6 +725,7 @@
       try {
         if (window.supabase) {
           supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+          setupRealtime();
         }
       } catch (err) {
         console.error('Supabase initialization failed:', err);
@@ -732,6 +733,64 @@
 
       let memos = [];
       
+      // Setup Supabase Realtime subscription
+      function setupRealtime() {
+        if (!supabase) return;
+
+        const channel = supabase
+          .channel('schema-db-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'memos'
+            },
+            (payload) => {
+              console.log('Realtime change received:', payload);
+              handleRealtimePayload(payload);
+            }
+          )
+          .subscribe();
+      }
+
+      function handleRealtimePayload(payload) {
+        const { eventType, new: newRecord, old: oldRecord } = payload;
+
+        if (eventType === 'INSERT') {
+          // Check if it already exists (optimistic update might have added it)
+          if (!memos.find(m => m.id === newRecord.id)) {
+            memos.unshift({
+              id: newRecord.id,
+              text: newRecord.text,
+              completed: newRecord.completed,
+              timestamp: newRecord.timestamp,
+              subMemos: newRecord.subMemos || []
+            });
+            renderMemos();
+          }
+        } else if (eventType === 'UPDATE') {
+          const index = memos.findIndex(m => m.id === newRecord.id);
+          if (index !== -1) {
+            // Check if data is actually different to avoid unnecessary re-renders
+            const current = memos[index];
+            if (JSON.stringify(current) !== JSON.stringify(newRecord)) {
+              memos[index] = {
+                ...newRecord,
+                subMemos: newRecord.subMemos || []
+              };
+              renderMemos();
+            }
+          }
+        } else if (eventType === 'DELETE') {
+          const index = memos.findIndex(m => m.id === oldRecord.id);
+          if (index !== -1) {
+            memos.splice(index, 1);
+            renderMemos();
+          }
+        }
+      }
+
       // Temporary storage for undo feature
       let lastDeletedMemo = null;
       let lastDeletedIndex = -1;
