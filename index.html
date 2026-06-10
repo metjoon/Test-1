@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- FontAwesome for beautiful icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
@@ -601,6 +603,44 @@
     .undo-btn:hover {
       color: #818cf8;
     }
+
+    /* DB Connection Status Badge */
+    .db-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      margin-top: 8px;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .db-status-badge.online {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border-color: rgba(52, 211, 153, 0.2);
+    }
+    .db-status-badge.offline {
+      background: rgba(245, 158, 11, 0.1);
+      color: #fbbf24;
+      border-color: rgba(251, 191, 36, 0.2);
+    }
+    .db-status-badge.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.2);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
@@ -614,6 +654,10 @@
         <h1>Vibe Note</h1>
       </div>
       <p class="subtitle">일상과 아이디어를 간편하게 기록하세요</p>
+      <div id="dbStatus" class="db-status-badge offline">
+        <span class="status-dot"></span>
+        <span class="status-text">연결 중...</span>
+      </div>
     </header>
 
     <div class="input-form">
@@ -661,19 +705,37 @@
       const memoCount = document.getElementById('memoCount');
       const clearAllBtn = document.getElementById('clearAllBtn');
 
-      // Load memos from localStorage
-      let memos = JSON.parse(localStorage.getItem('memos')) || [];
+      // Supabase Configuration
+      const supabaseUrl = 'https://wrlnnplqmmepcyvjrksp.supabase.co';
+      const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndybG5ucGxxbW1lcGN5dmpya3NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODQyNDksImV4cCI6MjA5NjY2MDI0OX0.I2A3ytyoqeKmZzVbLsyTjqYFcjBxlkM0KgGf7XVOBp8';
+      let supabase = null;
+      let isSupabaseOnline = false;
+
+      const dbStatus = document.getElementById('dbStatus');
+      const updateStatusBadge = (status, text) => {
+        if (!dbStatus) return;
+        dbStatus.className = `db-status-badge ${status}`;
+        const statusTextSpan = dbStatus.querySelector('.status-text');
+        if (statusTextSpan) {
+          statusTextSpan.textContent = text;
+        }
+      };
+
+      // Initialize Supabase Client
+      try {
+        if (window.supabase) {
+          supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        }
+      } catch (err) {
+        console.error('Supabase initialization failed:', err);
+      }
+
+      let memos = [];
       
       // Temporary storage for undo feature
       let lastDeletedMemo = null;
       let lastDeletedIndex = -1;
       let toastTimeout = null;
-
-      // Save memos to localStorage
-      const saveMemos = () => {
-        localStorage.setItem('memos', JSON.stringify(memos));
-        updateUI();
-      };
 
       // Update UI states (empty state, counts)
       const updateUI = () => {
@@ -684,6 +746,88 @@
         } else {
           emptyState.style.display = 'none';
           clearAllBtn.style.display = 'block';
+        }
+      };
+
+      // Load memos from Supabase with LocalStorage fallback
+      const loadMemos = async () => {
+        updateStatusBadge('offline', '연결 중...');
+        if (!supabase) {
+          console.warn('Supabase client is not available. Loading from localStorage.');
+          memos = JSON.parse(localStorage.getItem('memos')) || [];
+          updateStatusBadge('offline', '로컬 저장소 사용 중');
+          renderMemos();
+          return;
+        }
+
+        try {
+          const { data, error } = await supabase
+            .from('memos')
+            .select('*')
+            .order('timestamp', { ascending: false });
+
+          if (error) throw error;
+
+          memos = data.map(item => ({
+            id: item.id,
+            text: item.text,
+            completed: item.completed,
+            timestamp: item.timestamp,
+            subMemos: item.subMemos || []
+          }));
+          isSupabaseOnline = true;
+          updateStatusBadge('online', 'Supabase 동기화 됨');
+        } catch (err) {
+          console.error('Failed to load memos from Supabase:', err);
+          memos = JSON.parse(localStorage.getItem('memos')) || [];
+          isSupabaseOnline = false;
+          updateStatusBadge('error', '동기화 실패 (로컬 모드)');
+        }
+        renderMemos();
+      };
+
+      // Save/Sync memos to Supabase and LocalStorage
+      const saveMemos = async (action, memoData = null) => {
+        // Always update localStorage first as a backup
+        localStorage.setItem('memos', JSON.stringify(memos));
+        updateUI();
+
+        if (!supabase) return;
+
+        try {
+          if (action === 'insert' && memoData) {
+            const { error } = await supabase.from('memos').insert({
+              id: memoData.id,
+              text: memoData.text,
+              completed: memoData.completed,
+              timestamp: memoData.timestamp,
+              subMemos: memoData.subMemos || []
+            });
+            if (error) throw error;
+          } else if (action === 'update' && memoData) {
+            const { error } = await supabase.from('memos').update({
+              text: memoData.text,
+              completed: memoData.completed,
+              subMemos: memoData.subMemos || []
+            }).eq('id', memoData.id);
+            if (error) throw error;
+          } else if (action === 'delete' && memoData) {
+            const { error } = await supabase.from('memos').delete().eq('id', memoData.id);
+            if (error) throw error;
+          } else if (action === 'clearAll') {
+            // Deletes all records in the table
+            const { error } = await supabase.from('memos').delete().neq('id', '0');
+            if (error) throw error;
+          }
+          
+          if (!isSupabaseOnline) {
+            isSupabaseOnline = true;
+            updateStatusBadge('online', 'Supabase 동기화 됨');
+          }
+        } catch (err) {
+          console.error(`Supabase sync error on [${action}]:`, err);
+          isSupabaseOnline = false;
+          updateStatusBadge('error', '동기화 실패 (로컬 저장됨)');
         }
       };
 
@@ -720,7 +864,7 @@
         checkBtn.title = memo.completed ? '미완료로 표시' : '완료로 표시';
         checkBtn.addEventListener('click', () => {
           memo.completed = !memo.completed;
-          saveMemos();
+          saveMemos('update', memo);
           renderMemos();
         });
 
@@ -778,7 +922,7 @@
           subCheckBtn.title = sub.completed ? '미완료로 표시' : '완료로 표시';
           subCheckBtn.addEventListener('click', () => {
             sub.completed = !sub.completed;
-            saveMemos();
+            saveMemos('update', memo);
             renderMemos();
           });
 
@@ -792,7 +936,7 @@
           subDelete.title = '하위 항목 삭제';
           subDelete.addEventListener('click', () => {
             memo.subMemos = memo.subMemos.filter(s => s.id !== sub.id);
-            saveMemos();
+            saveMemos('update', memo);
             renderMemos();
           });
 
@@ -827,7 +971,7 @@
               text: subTextVal,
               completed: false
             });
-            saveMemos();
+            saveMemos('update', memo);
             renderMemos();
           }
         };
@@ -876,7 +1020,7 @@
         };
 
         memos.unshift(newMemo); // Add to the top
-        saveMemos();
+        saveMemos('insert', newMemo);
 
         // Prepend and trigger animation
         const item = createMemoElement(newMemo);
@@ -907,9 +1051,10 @@
       const undoDelete = () => {
         if (lastDeletedMemo !== null && lastDeletedIndex !== -1) {
           memos.splice(lastDeletedIndex, 0, lastDeletedMemo);
+          const memoToRestore = lastDeletedMemo;
           lastDeletedMemo = null;
           lastDeletedIndex = -1;
-          saveMemos();
+          saveMemos('insert', memoToRestore);
           renderMemos();
           hideToast();
         }
@@ -926,7 +1071,7 @@
               lastDeletedMemo = memos[index];
               lastDeletedIndex = index;
               memos.splice(index, 1);
-              saveMemos();
+              saveMemos('delete', lastDeletedMemo);
               renderMemos();
               showToast();
             }
@@ -948,15 +1093,15 @@
           lastDeletedMemo = null;
           lastDeletedIndex = -1;
           hideToast();
-          saveMemos();
+          saveMemos('clearAll');
           renderMemos();
         }
       });
 
       document.getElementById('undoBtn').addEventListener('click', undoDelete);
 
-      // Initial render
-      renderMemos();
+      // Load memos from Supabase
+      loadMemos();
     });
   </script>
 </body>
