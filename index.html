@@ -844,16 +844,24 @@
       function setupAuth() {
         if (!supabase) return;
 
-        // 깨끗한 리다이렉트 URL 생성 (해시나 파라미터 제거)
+        // 깨끗한 기본 URL 가져오기 (해시/파라미터 제거)
         const getCleanUrl = () => {
           const url = new URL(window.location.href);
           url.hash = '';
           url.search = '';
-          return url.toString();
+          return url.origin + url.pathname;
         };
 
+        // 페이지 로드 시 주소창에 토큰 정보(#access_token 등)가 남아있다면 정리
+        if (window.location.hash.includes('access_token')) {
+          // 토큰이 주소창에 보이지 않도록 이력을 교체 (사용자 경험 개선)
+          setTimeout(() => {
+            window.history.replaceState(null, '', getCleanUrl());
+          }, 100);
+        }
+
         if (window.location.protocol === 'file:') {
-          alert('경고: 현재 "로컬 파일(file://)" 환경입니다.\n구글 로그인을 사용하려면 반드시 Live Server 등으로 접속하세요.');
+          alert('경고: 현재 "로컬 파일" 환경입니다. 구글 로그인을 사용하려면 반드시 Live Server 등으로 접속하세요.');
         }
 
         // 초기 세션 확인
@@ -862,25 +870,30 @@
           updateAuthUI(session?.user || null);
         });
 
-        // 상태 변화 실시간 감시 (로그아웃 즉시 반영)
+        // 상태 변화 실시간 감시
         supabase.auth.onAuthStateChange((event, session) => {
           console.log('Auth event:', event);
           updateAuthUI(session?.user || null);
           
           if (event === 'SIGNED_IN') {
-            console.log('로그인 성공!');
-            loadMemos(); // 로그인 시 데이터 다시 불러오기
+            loadMemos();
+          }
+          
+          // 로그아웃 이벤트 발생 시 주소창 청소 및 페이지 리셋
+          if (event === 'SIGNED_OUT') {
+            window.location.href = getCleanUrl(); 
           }
         });
 
         // Login Handler
         googleLoginBtn.addEventListener('click', async () => {
           try {
-            console.log('로그인 시도 중... 리다이렉트 주소:', getCleanUrl());
+            const cleanUrl = getCleanUrl();
+            console.log('로그인 시도 중... 리다이렉트 주소:', cleanUrl);
             const { error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
-                redirectTo: getCleanUrl()
+                redirectTo: cleanUrl
               }
             });
             if (error) throw error;
@@ -893,9 +906,9 @@
         // Logout Handler
         logoutBtn.addEventListener('click', async () => {
           try {
+            // 로그아웃 실행 (onAuthStateChange에서 리다이렉트 처리됨)
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
-            console.log('로그아웃 완료');
           } catch (err) {
             alert('로그아웃 실패:\n' + err.message);
           }
